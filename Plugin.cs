@@ -6,7 +6,7 @@ using HarmonyLib;
 using System.Reflection;
 using VampireCommandFramework;
 
-namespace Jingles;
+namespace Nocturnalia;
 
 [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
 public class Plugin : BasePlugin
@@ -16,29 +16,42 @@ public class Plugin : BasePlugin
     public static Harmony Harmony => Instance._harmony;
     public static ManualLogSource LogInstance => Instance.Log;
 
-    // Config paths
+    // Config file paths
     public static readonly string ConfigPath = Path.Combine(Paths.ConfigPath, MyPluginInfo.PLUGIN_NAME);
-    public static readonly string SpawnLocations = Path.Combine(ConfigPath, "SpawnLocations");
+    public static readonly string ScheduledCoords = Path.Combine(ConfigPath, "ScheduledCoords");
+    public static readonly string IntervalCoords = Path.Combine(ConfigPath, "IntervalCoords");
 
-    // Config options
-    static ConfigEntry<bool> _enableJingles;
-    static ConfigEntry<string> _eventRewards;
-    static ConfigEntry<string> _rewardAmounts;
-    static ConfigEntry<int> _eventFrequency;
+    // List for directory creation
+    static readonly List<string> FilePaths =
+    [
+        ConfigPath,
+        ScheduledCoords,
+        IntervalCoords
+    ];
+
+    // Config settings
+    static ConfigEntry<bool> _crystalNodeEvents;
+    static ConfigEntry<int> _dropTableQuantity;
+    static ConfigEntry<float> _dropTableRate;
+    static ConfigEntry<float> _nodeEventsInterval;
+    static ConfigEntry<string> _scheduledNodeEvents;
 
     // Public accessors for config options
-    public static bool EnableJingles => _enableJingles.Value;
-    public static string EventRewards => _eventRewards.Value;
-    public static string RewardAmounts => _rewardAmounts.Value;
-    public static int EventFrequency => _eventFrequency.Value;
-
+    public static readonly bool CrystalNodes = _crystalNodeEvents.Value;
+    public static readonly int DropTableQuantity = _dropTableQuantity.Value;
+    public static readonly float DropTableRate = _dropTableRate.Value;
+    public static readonly float NodeEventsInterval = _nodeEventsInterval.Value;
+    public static readonly string ScheduledNodeEvents = _scheduledNodeEvents.Value;
     public override void Load()
     {
         Instance = this;
+
         _harmony = Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly());
         CommandRegistry.RegisterAll();
+
         InitConfig();
         LoadData();
+
         Core.Log.LogInfo($"{MyPluginInfo.PLUGIN_NAME}[{MyPluginInfo.PLUGIN_VERSION}] loaded!");
     }
     static void CreateDirectories(List<string> paths)
@@ -53,12 +66,13 @@ public class Plugin : BasePlugin
     }
     static void InitConfig()
     {
-        CreateDirectories(filePaths);
+        CreateDirectories(FilePaths);
 
-        _enableJingles = InitConfigEntry("General", "EnableJingles", false, "Enable or disable the Jingles plugin");
-        _eventRewards = InitConfigEntry("General", "EventRewards", "-257494203", "Comma-separated list of prefab hashes used as rewards.");
-        _rewardAmounts = InitConfigEntry("General", "RewardAmounts", "250", "Comma-separated list of reward amounts, should match the length of eventRewards.");
-        _eventFrequency = InitConfigEntry("General", "EventFrequency", 180, "Frequency of events in minutes");
+        _crystalNodeEvents = InitConfigEntry("CrystalNodes", "CrystalNodeEvents", false, "Enable/disable crystal nodes event.");
+        _dropTableQuantity = InitConfigEntry("CrystalNodes", "DropTableQuantity", 150, "Adjust to modify base quantity of crystal harvested from resource node (150 is vanilla).");
+        _dropTableRate = InitConfigEntry("CrystalNodes", "DropTableRate", 1f, "Adjust to modify base drop rate chance of crystal harvested from resource node (1 is vanilla).");
+        _nodeEventsInterval = InitConfigEntry("CrystalNodes", "NodeEventsInterval", 180f, "Interval between crystal node events. Can be used with scheduling, leave at 0 for scheduled only.");
+        _scheduledNodeEvents = InitConfigEntry("CrystalNodes", "ScheduledNodeEvents", "", "Scheduled crystal node events. Can be used with intervals, leave blank for intervals only. Uses timezone of server. (12:30,13:30,14:00)");
     }
     static ConfigEntry<T> InitConfigEntry<T>(string section, string key, T defaultValue, string description)
     {
@@ -67,6 +81,7 @@ public class Plugin : BasePlugin
 
         // Check if the key exists in the configuration file and retrieve its current value
         var configFile = Path.Combine(ConfigPath, $"{MyPluginInfo.PLUGIN_GUID}.cfg");
+
         if (File.Exists(configFile))
         {
             var config = new ConfigFile(configFile, true);
@@ -76,6 +91,7 @@ public class Plugin : BasePlugin
                 entry.Value = existingEntry.Value;
             }
         }
+
         return entry;
     }
     public override bool Unload()
@@ -86,12 +102,6 @@ public class Plugin : BasePlugin
     }
     static void LoadData()
     {
-        Core.DataStructures.LoadSpawnLocations();
+        Core.DataStructures.LoadNodeCoords();
     }
-
-    static readonly List<string> filePaths =
-    [
-        ConfigPath,
-        SpawnLocations
-    ];
 }

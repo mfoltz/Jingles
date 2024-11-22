@@ -1,99 +1,98 @@
 using ProjectM;
+using ProjectM.Network;
 using Stunlock.Core;
 using Stunlock.Localization;
 using System.Reflection;
 using System.Text.Json;
+using Unity.Entities;
+using VampireCommandFramework;
 
-namespace Jingles.Services;
-
+namespace Nocturnalia.Services;
 internal class LocalizationService
 {
+    const string ENGLISH_RESOURCE = "Nocturnalia.Localization.English.json";
+    const string PREFABS_RESOURCE = "Nocturnalia.Localization.Prefabs.json";
     struct Code
     {
         public string Key { get; set; }
         public string Value { get; set; }
         public string Description { get; set; }
     }
-
     struct Node
     {
         public string Guid { get; set; }
         public string Text { get; set; }
     }
-
+    struct Words
+    {
+        public string Original { get; set; }
+        public string Translation { get; set; }
+    }
     struct LocalizationFile
     {
         public Code[] Codes { get; set; }
         public Node[] Nodes { get; set; }
+        public Words[] Words { get; set; }
     }
 
-    Dictionary<string, string> localization = [];
-    Dictionary<int, string> prefabNames = [];
-
+    static readonly Dictionary<string, string> Localization = [];
+    static readonly Dictionary<int, string> PrefabNames = [];
     public LocalizationService()
     {
-        LoadLocalization();
+        LoadLocalizations();
         LoadPrefabNames();
     }
-
-    void LoadLocalization()
+    static void LoadLocalizations()
     {
-        var resourceName = "Sanguis.Localization.English.json";
         var assembly = Assembly.GetExecutingAssembly();
-        var stream = assembly.GetManifestResourceStream(resourceName);
-        
-        using StreamReader reader = new(stream);
-        string jsonContent = reader.ReadToEnd();
+        var stream = assembly.GetManifestResourceStream(ENGLISH_RESOURCE);
+
+        using StreamReader localizationReader = new(stream);
+        string jsonContent = localizationReader.ReadToEnd();
         var localizationFile = JsonSerializer.Deserialize<LocalizationFile>(jsonContent);
-        localization = localizationFile.Nodes.ToDictionary(x => x.Guid, x => x.Text);   
-    }
 
-    void LoadPrefabNames()
+        localizationFile.Nodes
+            .ToDictionary(x => x.Guid, x => x.Text)
+            .ForEach(kvp => Localization[kvp.Key] = kvp.Value);
+    }
+    static void LoadPrefabNames()
     {
-        var resourceName = "Sanguis.Localization.Prefabs.json";
         var assembly = Assembly.GetExecutingAssembly();
-        var stream = assembly.GetManifestResourceStream(resourceName);
+        var stream = assembly.GetManifestResourceStream(PREFABS_RESOURCE);
 
         using StreamReader reader = new(stream);
         string jsonContent = reader.ReadToEnd();
-        prefabNames = JsonSerializer.Deserialize<Dictionary<int, string>>(jsonContent);
+        var prefabNames = JsonSerializer.Deserialize<Dictionary<int, string>>(jsonContent);
+        prefabNames.ForEach(kvp => PrefabNames[kvp.Key] = kvp.Value);
     }
-
-    public string GetLocalization(string guid)
+    internal static void HandleReply(ChatCommandContext ctx, string message)
     {
-        if (localization.TryGetValue(guid, out var text))
-        {
-            return text;
-        }
-        return $"<Localization not found for {guid}>";
+        ctx.Reply(message);
     }
-    public string GetLocalization(LocalizationKey key)
+    internal static void HandleServerReply(EntityManager entityManager, User user, string message)
+    {
+        ServerChatUtils.SendSystemMessageToClient(entityManager, user, message);
+    }
+    static string GetLocalizationFromKey(LocalizationKey key)
     {
         var guid = key.Key.ToGuid().ToString();
         return GetLocalization(guid);
     }
-    public string GetPrefabName(PrefabGUID itemPrefabGUID)
+    public static string GetPrefabName(PrefabGUID prefabGUID)
     {
-        if(!prefabNames.TryGetValue(itemPrefabGUID._Value, out var itemLocalizationHash))
+        if (PrefabNames.TryGetValue(prefabGUID.GuidHash, out var itemLocalizationHash))
         {
-            return null;
+            return GetLocalization(itemLocalizationHash);
         }
-
-        string name = GetLocalization(itemLocalizationHash);
-
-        if(Core.PrefabCollectionSystem._PrefabLookupMap.TryGetValue(itemPrefabGUID, out var prefab))
-        {
-            if (prefab.Has<ItemData>())
-            {
-                var itemData = prefab.Read<ItemData>();
-                if (itemData.ItemType == ItemType.Tech)
-                {
-                    name = "Book " + name;
-                }
-            }
-            
-        }
-        return name;
+        return prefabGUID.LookupName();
     }
+    public static string GetLocalization(string Guid)
+    {
+        if (Localization.TryGetValue(Guid, out var Text))
+        {
+            return Text;
+        }
 
+        return "Couldn't find key for localization...";
+    }
 }

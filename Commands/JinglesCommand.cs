@@ -2,9 +2,9 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
 using VampireCommandFramework;
-using static Jingles.Core.DataStructures;
+using static Nocturnalia.Core.DataStructures;
 
-namespace Jingles.Commands;
+namespace Nocturnalia.Commands;
 
 [CommandGroup(name: "jingles")]
 internal static class JinglesCommand

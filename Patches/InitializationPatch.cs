@@ -1,7 +1,7 @@
 using HarmonyLib;
 using Unity.Scenes;
 
-namespace Jingles.Patches;
+namespace Nocturnalia.Patches;
 
 [HarmonyPatch]
 internal static class InitializationPatch
@@ -13,9 +13,10 @@ internal static class InitializationPatch
         try
         {
             Core.Initialize();
+
             if (Core.hasInitialized)
             {
-                Core.Log.LogInfo($"|{MyPluginInfo.PLUGIN_NAME}[{MyPluginInfo.PLUGIN_VERSION}] initialized|");
+                Core.Log.LogInfo($"|{MyPluginInfo.PLUGIN_NAME}[{MyPluginInfo.PLUGIN_VERSION}] initialized!");
                 Plugin.Harmony.Unpatch(typeof(SceneSystem).GetMethod("ShutdownStreamingSupport"), typeof(InitializationPatch).GetMethod("ShutdownStreamingSupportPostfix"));
             }
         }

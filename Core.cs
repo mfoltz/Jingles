@@ -1,64 +1,52 @@
 using BepInEx.Logging;
+using BepInEx.Unity.IL2CPP.Utils.Collections;
+using Nocturnalia.Services;
 using ProjectM;
+using ProjectM.Physics;
 using ProjectM.Scripting;
-using Jingles.Services;
+using System.Collections;
 using System.Text.Json;
 using Unity.Entities;
 using Unity.Mathematics;
-using Stunlock.Core;
+using UnityEngine;
 
-namespace Jingles;
+namespace Nocturnalia;
 internal static class Core
 {
-    public static World Server { get; } = GetWorld("Server") ?? throw new Exception("There is no Server world (yet)...");
+    static World Server { get; } = GetServerWorld() ?? throw new Exception("There is no Server world (yet)...");
     public static EntityManager EntityManager => Server.EntityManager;
-    public static ServerScriptMapper ServerScriptMapper { get; internal set; }
-    public static ServerGameManager ServerGameManager => ServerScriptMapper.GetServerGameManager();
-    public static PrefabCollectionSystem PrefabCollectionSystem { get; internal set; }
-    public static LocalizationService Localization { get; } = new();
-    public static JinglesService JinglesService { get; internal set; } 
+    public static ServerGameManager ServerGameManager => SystemService.ServerScriptMapper.GetServerGameManager();
+    public static SystemService SystemService { get; } = new(Server);
+    public static double ServerTime => ServerGameManager.ServerTime;
     public static ManualLogSource Log => Plugin.LogInstance;
 
     public static bool hasInitialized;
+
+    static MonoBehaviour MonoBehaviour;
     public static void Initialize()
     {
         if (hasInitialized) return;
 
-        ServerScriptMapper = Server.GetExistingSystemManaged<ServerScriptMapper>();
-        PrefabCollectionSystem = Server.GetExistingSystemManaged<PrefabCollectionSystem>();
-
-        InitializeRewards();
-        if (Plugin.EnableJingles)
+        if (Plugin.CrystalNodes)
         {
-            JinglesService = new();
+            _ = new NodeEventService();
         }
 
         hasInitialized = true;
     }
-    static World GetWorld(string name)
+    static World GetServerWorld()
     {
-        foreach (var world in World.s_AllWorlds)
-        {
-            if (world.Name == name)
-            {
-                return world;
-            }
-        }
-        return null;
+        return World.s_AllWorlds.ToArray().FirstOrDefault(world => world.Name == "Server");
     }
-    static void InitializeRewards()
+    public static void StartCoroutine(IEnumerator routine)
     {
-        List<PrefabGUID> rewardPrefabs = ParseConfigString(Plugin.EventRewards).Select(x => new PrefabGUID(x)).ToList();
-        List<int> rewardAmounts = ParseConfigString(Plugin.RewardAmounts);
-        JinglesService.Rewards = rewardPrefabs.Zip(rewardAmounts, (prefab, amount) => new { prefab, amount }).ToDictionary(x => x.prefab, x => x.amount);
-    }
-    static List<int> ParseConfigString(string configString)
-    {
-        if (string.IsNullOrEmpty(configString))
+        if (MonoBehaviour == null)
         {
-            return [];
+            MonoBehaviour = new GameObject("Nocturnalia").AddComponent<IgnorePhysicsDebugSystem>();
+            UnityEngine.Object.DontDestroyOnLoad(MonoBehaviour.gameObject);
         }
-        return configString.Split(',').Select(int.Parse).ToList();
+
+        MonoBehaviour.StartCoroutine(routine.WrapToIl2Cpp());
     }
     public class DataStructures
     {
@@ -75,17 +63,22 @@ internal static class Core
             IncludeFields = true
         };
 
-        public static List<Float3> SpawnLocations = [];
+        public static List<Float3> ScheduledCoords = [];
+        public static List<Float3> IntervalCoords = [];
 
         static readonly Dictionary<string, string> filePaths = new()
         {
-            {"SpawnLocations", JsonFiles.SpawnLocations},
+            {"ScheduledCoords", JsonFiles.ScheduledCoords},
+            {"IntervalCoords", JsonFiles.IntervalCoords}
         };
-        public static void LoadSpawnLocations() => LoadData<Float3>(ref SpawnLocations, "SpawnLocations");
-        public static void SaveSpawnLocations() => SaveData<Float3>(SpawnLocations, "SpawnLocations");
+        public static void LoadScheduledCoords() => LoadData<Float3>(ref ScheduledCoords, "ScheduledCoords");
+        public static void SaveScheduledCoords() => SaveData<Float3>(ScheduledCoords, "ScheduledCoords");
+        public static void LoadIntervalCoords() => LoadData<Float3>(ref IntervalCoords, "IntervalCoords");
+        public static void SaveIntervalCoords() => SaveData<Float3>(IntervalCoords, "IntervalCoords");
         public static void LoadData<T>(ref List<Float3> dataStructure, string key)
         {
             string path = filePaths[key];
+
             if (!File.Exists(path))
             {
                 // If the file does not exist, create a new empty file to avoid errors on initial load.
@@ -108,9 +101,9 @@ internal static class Core
                     dataStructure = data ?? []; // Ensure non-null assignment
                 }
             }
-            catch (IOException)
+            catch (IOException ex)
             {
-                Log.LogError($"Failed to load {key} data from {path}...");
+                Log.LogError($"Failed loading {key} from {path}: {ex}");
             }
         }
         public static void SaveData<T>(List<Float3> data, string key)
@@ -122,14 +115,15 @@ internal static class Core
                 string json = JsonSerializer.Serialize(data, prettyJsonOptions);
                 File.WriteAllText(path, json);
             }
-            catch (IOException)
+            catch (IOException ex)
             {
-                Log.LogError($"Failed to save {key} data to {path}...");
+                Log.LogError($"Failed saving {key} to {path}: {ex}");
             }
         }
     }
     static class JsonFiles
     {
-        public static readonly string SpawnLocations = Plugin.SpawnLocations;
+        public static readonly string ScheduledCoords = Plugin.ScheduledCoords;
+        public static readonly string IntervalCoords = Plugin.IntervalCoords;
     }
 }
