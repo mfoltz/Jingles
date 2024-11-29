@@ -56,14 +56,14 @@ internal class NodeEventService
 
         while (true)
         {
+            yield return IntervalDelay;
+
             float3 coord = IntervalCoords[index++ % IntervalCoords.Count];
 
             yield return TriggerIntervalEvents(coord);
-
-            yield return IntervalDelay;
         }
     }
-    static IEnumerator ScheduledEvents()
+    static IEnumerator ScheduledEvents() // WIP, probably need to redo this a bit when I decide how to match up times with coords
     {
         while (true)
         {
@@ -92,6 +92,7 @@ internal class NodeEventService
             {
                 // Trigger the event at the current coordinate
                 float3 coord = ScheduledCoords[i % ScheduledCoords.Count];
+
                 yield return TriggerScheduledEvent(coord);
 
                 // Wait for the time until the next scheduled event
